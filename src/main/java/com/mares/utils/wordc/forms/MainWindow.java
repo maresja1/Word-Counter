@@ -5,14 +5,18 @@
  */
 package com.mares.utils.wordc.forms;
 
+import java.awt.HeadlessException;
 import java.awt.event.WindowEvent;
 import java.io.File;
 import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import javax.swing.JFileChooser;
+import javax.swing.ListSelectionModel;
 import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
+import javax.swing.event.ListSelectionEvent;
+import javax.swing.event.ListSelectionListener;
 import org.jdesktop.observablecollections.ObservableCollections;
 
 /**
@@ -22,7 +26,9 @@ import org.jdesktop.observablecollections.ObservableCollections;
 public class MainWindow extends javax.swing.JFrame {
     private List<DocumentReference> documents;
     final JFileChooser fileChooser = new JFileChooser();
-    private static final int DEFAULT_PER_PAGE = 1800;
+    public static final int DEFAULT_PER_PAGE = 1800;
+    int charsPerPage = DEFAULT_PER_PAGE;
+    int countSum = 0;
 
 
 
@@ -51,10 +57,25 @@ public class MainWindow extends javax.swing.JFrame {
             }
             
             private void updated(){
-                recount();
+                
+                int perPage;
+                try{
+                    perPage = Integer.parseInt(perPageTxt.getText());
+                } catch(NumberFormatException e){
+                    perPage = DEFAULT_PER_PAGE;
+        //            perPageTxt.setText(Integer.toString(perPage));
+                }
+                setCharsPerPage(perPage);
             }
         });
         refreshListSelected();
+        ListSelectionModel cellSelectionModel = documentsList.getSelectionModel();
+
+        cellSelectionModel.addListSelectionListener(new ListSelectionListener() {
+            public void valueChanged(ListSelectionEvent e) {
+              refreshListSelected();
+            }
+        });
     }
 
     public List<DocumentReference> getDocuments() {
@@ -62,28 +83,54 @@ public class MainWindow extends javax.swing.JFrame {
     }
     
     public void recount(){
-        double count = 0;
+        int countOld = countSum;
+        countSum = 0;
+        String pagesStringOld = getPagesString();
         for(DocumentReference documentReference : documents){
-            count += documentReference.getCount();
+            countSum += documentReference.getCount();
         }
-        int perPage;
-        try{
-            perPage = Integer.parseInt(perPageTxt.getText());
-        } catch(NumberFormatException e){
-            perPage = DEFAULT_PER_PAGE;
-//            perPageTxt.setText(Integer.toString(perPage));
-        }
-        DecimalFormat decimalFormat = new DecimalFormat("###.###");
-        pageCountTxt.setText(decimalFormat.format(count/perPage));
+        firePropertyChange("countSum", countOld, countSum);
+        firePropertyChange("pagesString", pagesStringOld, getPagesString());
     }
 
+    public int getCountSum() {
+        return countSum;
+    }
+    
+    public String getPagesString(){
+        DecimalFormat decimalFormat = new DecimalFormat("###.###");
+        return decimalFormat.format(((double)getCountSum())/getCharsPerPage());
+    }
+
+    public void setCharsPerPage(int charsPerPage) {
+        int oldPerPage = this.charsPerPage;
+        String pagesStringOld = getPagesString();
+        this.charsPerPage = charsPerPage;
+        firePropertyChange("charsPerPage", oldPerPage, charsPerPage);
+        firePropertyChange("pagesString", pagesStringOld, getPagesString());
+    }    
+    
+    public int getCharsPerPage(){
+        return charsPerPage;
+    }
+
+    private int recountIndex(int index){
+        return documentsList.getRowSorter() == null ? index : documentsList.getRowSorter().convertRowIndexToModel(index);
+    }
+    
     public DocumentReference getSelectedDocument(){
-        int selected = documentsList.getSelectedIndex();
+        int selected = documentsList.getSelectedRowCount() <= 0 ? -1 : documentsList.getSelectedRows()[0];
         if(selected >= 0){
-            return documents.get(selected);
+            return documents.get(recountIndex(selected));
         } else {
             return null;
         }
+    }
+    
+    private void refreshListSelected() {
+        boolean isSelected = getSelectedDocument() != null;
+        showBtn.setEnabled(isSelected);
+        removeBtn.setEnabled(isSelected);
     }
     
     /**
@@ -97,8 +144,6 @@ public class MainWindow extends javax.swing.JFrame {
         bindingGroup = new org.jdesktop.beansbinding.BindingGroup();
 
         jButton1 = new javax.swing.JButton();
-        jScrollPane1 = new javax.swing.JScrollPane();
-        documentsList = new javax.swing.JList();
         addBtn = new javax.swing.JButton();
         removeBtn = new javax.swing.JButton();
         closeBtn = new javax.swing.JButton();
@@ -108,29 +153,14 @@ public class MainWindow extends javax.swing.JFrame {
         perPageLbl = new javax.swing.JLabel();
         pageCountTxt = new javax.swing.JTextField();
         showBtn = new javax.swing.JButton();
+        showBtn1 = new javax.swing.JButton();
+        jScrollPane2 = new javax.swing.JScrollPane();
+        documentsList = new javax.swing.JTable();
 
         jButton1.setText("jButton1");
 
         setDefaultCloseOperation(javax.swing.WindowConstants.EXIT_ON_CLOSE);
         setTitle("Word Counter");
-
-        documentsList.setModel(new javax.swing.AbstractListModel() {
-            String[] strings = { "Item 1", "Item 2", "Item 3", "Item 4", "Item 5" };
-            public int getSize() { return strings.length; }
-            public Object getElementAt(int i) { return strings[i]; }
-        });
-
-        org.jdesktop.beansbinding.ELProperty eLProperty = org.jdesktop.beansbinding.ELProperty.create("${documents}");
-        org.jdesktop.swingbinding.JListBinding jListBinding = org.jdesktop.swingbinding.SwingBindings.createJListBinding(org.jdesktop.beansbinding.AutoBinding.UpdateStrategy.READ_WRITE, this, eLProperty, documentsList);
-        jListBinding.setDetailBinding(org.jdesktop.beansbinding.ELProperty.create("${fileName}"));
-        bindingGroup.addBinding(jListBinding);
-
-        documentsList.addListSelectionListener(new javax.swing.event.ListSelectionListener() {
-            public void valueChanged(javax.swing.event.ListSelectionEvent evt) {
-                documentsListValueChanged(evt);
-            }
-        });
-        jScrollPane1.setViewportView(documentsList);
 
         addBtn.setText("Add");
         addBtn.addActionListener(new java.awt.event.ActionListener() {
@@ -163,7 +193,10 @@ public class MainWindow extends javax.swing.JFrame {
 
         pageCountTxt.setEditable(false);
         pageCountTxt.setHorizontalAlignment(javax.swing.JTextField.TRAILING);
-        pageCountTxt.setText("0");
+
+        org.jdesktop.beansbinding.Binding binding = org.jdesktop.beansbinding.Bindings.createAutoBinding(org.jdesktop.beansbinding.AutoBinding.UpdateStrategy.READ_WRITE, this, org.jdesktop.beansbinding.ELProperty.create("${pagesString}"), pageCountTxt, org.jdesktop.beansbinding.BeanProperty.create("text"));
+        bindingGroup.addBinding(binding);
+
         pageCountTxt.addActionListener(new java.awt.event.ActionListener() {
             public void actionPerformed(java.awt.event.ActionEvent evt) {
                 pageCountTxtActionPerformed(evt);
@@ -189,8 +222,8 @@ public class MainWindow extends javax.swing.JFrame {
                     .addComponent(jLabel1))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(jPanel1Layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
-                    .addComponent(perPageTxt)
-                    .addComponent(pageCountTxt, javax.swing.GroupLayout.DEFAULT_SIZE, 129, Short.MAX_VALUE))
+                    .addComponent(perPageTxt, javax.swing.GroupLayout.DEFAULT_SIZE, 161, Short.MAX_VALUE)
+                    .addComponent(pageCountTxt))
                 .addContainerGap())
         );
         jPanel1Layout.setVerticalGroup(
@@ -214,6 +247,34 @@ public class MainWindow extends javax.swing.JFrame {
             }
         });
 
+        showBtn1.setText("Clear");
+        showBtn1.addActionListener(new java.awt.event.ActionListener() {
+            public void actionPerformed(java.awt.event.ActionEvent evt) {
+                showBtn1ActionPerformed(evt);
+            }
+        });
+
+        documentsList.setCellSelectionEnabled(true);
+        documentsList.setColumnSelectionAllowed(true);
+        documentsList.setSelectionMode(javax.swing.ListSelectionModel.SINGLE_INTERVAL_SELECTION);
+
+        org.jdesktop.beansbinding.ELProperty eLProperty = org.jdesktop.beansbinding.ELProperty.create("${documents}");
+        org.jdesktop.swingbinding.JTableBinding jTableBinding = org.jdesktop.swingbinding.SwingBindings.createJTableBinding(org.jdesktop.beansbinding.AutoBinding.UpdateStrategy.READ_WRITE, this, eLProperty, documentsList);
+        org.jdesktop.swingbinding.JTableBinding.ColumnBinding columnBinding = jTableBinding.addColumnBinding(org.jdesktop.beansbinding.ELProperty.create("${fileName}"));
+        columnBinding.setColumnName("File");
+        columnBinding.setColumnClass(String.class);
+        columnBinding.setEditable(false);
+        columnBinding = jTableBinding.addColumnBinding(org.jdesktop.beansbinding.ELProperty.create("${count}"));
+        columnBinding.setColumnName("Characters");
+        columnBinding.setColumnClass(Integer.class);
+        columnBinding.setEditable(false);
+        columnBinding = jTableBinding.addColumnBinding(org.jdesktop.beansbinding.ELProperty.create("${pagesString}"));
+        columnBinding.setColumnName("Pages");
+        columnBinding.setColumnClass(String.class);
+        bindingGroup.addBinding(jTableBinding);
+        jTableBinding.bind();
+        jScrollPane2.setViewportView(documentsList);
+
         javax.swing.GroupLayout layout = new javax.swing.GroupLayout(getContentPane());
         getContentPane().setLayout(layout);
         layout.setHorizontalGroup(
@@ -222,13 +283,14 @@ public class MainWindow extends javax.swing.JFrame {
                 .addContainerGap()
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
                     .addComponent(jPanel1, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(jScrollPane1, javax.swing.GroupLayout.DEFAULT_SIZE, 289, Short.MAX_VALUE))
+                    .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 0, Short.MAX_VALUE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
-                    .addComponent(removeBtn, javax.swing.GroupLayout.DEFAULT_SIZE, 95, Short.MAX_VALUE)
-                    .addComponent(showBtn, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(closeBtn, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
-                    .addComponent(addBtn, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE))
+                    .addComponent(removeBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 95, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(showBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 95, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(closeBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 95, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(addBtn, javax.swing.GroupLayout.PREFERRED_SIZE, 95, javax.swing.GroupLayout.PREFERRED_SIZE)
+                    .addComponent(showBtn1, javax.swing.GroupLayout.Alignment.LEADING, javax.swing.GroupLayout.PREFERRED_SIZE, 95, javax.swing.GroupLayout.PREFERRED_SIZE))
                 .addContainerGap())
         );
         layout.setVerticalGroup(
@@ -242,8 +304,10 @@ public class MainWindow extends javax.swing.JFrame {
                         .addComponent(removeBtn)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                         .addComponent(showBtn)
-                        .addGap(0, 40, Short.MAX_VALUE))
-                    .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 0, Short.MAX_VALUE))
+                        .addGap(18, 18, 18)
+                        .addComponent(showBtn1)
+                        .addGap(0, 0, Short.MAX_VALUE))
+                    .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 0, Short.MAX_VALUE))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED)
                 .addGroup(layout.createParallelGroup(javax.swing.GroupLayout.Alignment.TRAILING)
                     .addComponent(closeBtn)
@@ -261,22 +325,28 @@ public class MainWindow extends javax.swing.JFrame {
     }//GEN-LAST:event_closeBtnActionPerformed
 
     private void addBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_addBtnActionPerformed
+        insertDocument();
+    }//GEN-LAST:event_addBtnActionPerformed
+
+    private void insertDocument() throws HeadlessException {
         int returnVal = fileChooser.showOpenDialog(addBtn);
         if(returnVal == JFileChooser.APPROVE_OPTION) {
             File[] selectedFiles = fileChooser.getSelectedFiles();
             for(File file: selectedFiles){
-                documents.add(new DocumentReference(file));
+                documents.add(new DocumentReference(file).connect(this));
             }
             recount();
         }
-    }//GEN-LAST:event_addBtnActionPerformed
+    }
 
     private void removeBtnActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_removeBtnActionPerformed
-        int selected = documentsList.getSelectedIndex();
-        if(selected >= 0){
-            documents.remove(selected);
-            recount();
+        int[] selected = documentsList.getSelectedRows();
+        int deleted = 0;
+        for(int sel : selected){            
+            documents.remove(recountIndex(sel) - deleted);
+            deleted++;
         }
+        recount();
     }//GEN-LAST:event_removeBtnActionPerformed
 
     private void pageCountTxtActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_pageCountTxtActionPerformed
@@ -300,15 +370,10 @@ public class MainWindow extends javax.swing.JFrame {
         }
     }//GEN-LAST:event_showBtnActionPerformed
 
-    private void documentsListValueChanged(javax.swing.event.ListSelectionEvent evt) {//GEN-FIRST:event_documentsListValueChanged
-        refreshListSelected();
-    }//GEN-LAST:event_documentsListValueChanged
+    private void showBtn1ActionPerformed(java.awt.event.ActionEvent evt) {//GEN-FIRST:event_showBtn1ActionPerformed
+        documents.clear();
+    }//GEN-LAST:event_showBtn1ActionPerformed
 
-    private void refreshListSelected() {
-        boolean isSelected = getSelectedDocument() != null;
-        showBtn.setEnabled(isSelected);
-        removeBtn.setEnabled(isSelected);
-    }
 
     /**
      * @param args the command line arguments
@@ -348,16 +413,17 @@ public class MainWindow extends javax.swing.JFrame {
     // Variables declaration - do not modify//GEN-BEGIN:variables
     private javax.swing.JButton addBtn;
     private javax.swing.JButton closeBtn;
-    private javax.swing.JList documentsList;
+    private javax.swing.JTable documentsList;
     private javax.swing.JButton jButton1;
     private javax.swing.JLabel jLabel1;
     private javax.swing.JPanel jPanel1;
-    private javax.swing.JScrollPane jScrollPane1;
+    private javax.swing.JScrollPane jScrollPane2;
     private javax.swing.JTextField pageCountTxt;
     private javax.swing.JLabel perPageLbl;
     private javax.swing.JTextField perPageTxt;
     private javax.swing.JButton removeBtn;
     private javax.swing.JButton showBtn;
+    private javax.swing.JButton showBtn1;
     private org.jdesktop.beansbinding.BindingGroup bindingGroup;
     // End of variables declaration//GEN-END:variables
 }

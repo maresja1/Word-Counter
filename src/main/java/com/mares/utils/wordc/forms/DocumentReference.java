@@ -5,6 +5,8 @@
  */
 package com.mares.utils.wordc.forms;
 
+import java.beans.PropertyChangeListener;
+import java.beans.PropertyChangeSupport;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -14,6 +16,7 @@ import java.io.OutputStream;
 import java.io.OutputStreamWriter;
 import java.lang.ref.SoftReference;
 import java.nio.charset.Charset;
+import java.text.DecimalFormat;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.logging.Level;
@@ -27,6 +30,10 @@ import org.apache.tika.parser.Parser;
 import org.apache.tika.parser.html.BoilerpipeContentHandler;
 import org.apache.tika.sax.BodyContentHandler;
 import org.apache.tika.sax.ContentHandlerDecorator;
+import org.jdesktop.beansbinding.AutoBinding.UpdateStrategy;
+import org.jdesktop.beansbinding.BeanProperty;
+import org.jdesktop.beansbinding.Binding;
+import org.jdesktop.beansbinding.Bindings;
 import org.jdesktop.observablecollections.ObservableCollections;
 import org.xml.sax.ContentHandler;
 import org.xml.sax.SAXException;
@@ -40,6 +47,9 @@ public class DocumentReference {
     private Integer count = null;
     // soft reference to allow garbage collection when memory needed
     private SoftReference<String> contentCache = new SoftReference<String>(null);
+    private int perPage = MainWindow.DEFAULT_PER_PAGE;
+    
+  private PropertyChangeSupport props = new PropertyChangeSupport(this);
 
     public DocumentReference(File file) {
         this.file = file;
@@ -88,6 +98,7 @@ public class DocumentReference {
         }
         return null;
     }
+    
     public int getCount() {
         if(count==null){
             String content = getContent();
@@ -102,5 +113,44 @@ public class DocumentReference {
     
     public String getFileName(){
         return file.getName();
+    }
+    
+    public String getPagesString(){
+        DecimalFormat decimalFormat = new DecimalFormat("###.###");
+        return decimalFormat.format(((double)getCount())/perPage);
+    }
+    
+    public void setCharsPerPage(int chars){
+        String pagesStringOld = getPagesString();
+        this.perPage = chars;
+        props.firePropertyChange("pagesString", pagesStringOld, getPagesString());
+    }
+    
+    public DocumentReference connect(MainWindow window){
+        BeanProperty charsPerPage = BeanProperty.create("charsPerPage");
+        
+        Binding tintBinding = Bindings.createAutoBinding(UpdateStrategy.READ,
+                window, charsPerPage, this, charsPerPage);
+        tintBinding.bind();
+        
+        setCharsPerPage(window.getCharsPerPage());
+        
+        return this;
+    }
+
+    public void addPropertyChangeListener(PropertyChangeListener l) {
+        props.addPropertyChangeListener(l);
+    }
+
+    public void addPropertyChangeListener(String propName, PropertyChangeListener l) {
+        props.addPropertyChangeListener(propName, l);
+    }
+
+    public void removePropertyChangeListener(PropertyChangeListener l) {
+        props.removePropertyChangeListener(l);
+    }
+
+    public void removePropertyChangeListener(String propName, PropertyChangeListener l) {
+        props.removePropertyChangeListener(propName, l);
     }
 }
