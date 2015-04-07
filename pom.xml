@@ -16,7 +16,7 @@
                 <artifactId>exec-maven-plugin</artifactId>
                 <version>1.2.1</version>
                 <configuration>
-                    <mainClass>com.mares.utils.wordc.forms.MainForm</mainClass>
+                    <mainClass>com.mares.utils.wordc.forms.MainWindow</mainClass>
                     <arguments>
                         <argument>maven</argument>
                     </arguments>
@@ -27,7 +27,7 @@
                 <configuration>
                     <archive>
                         <manifest>
-                            <mainClass>com.mares.utils.wordc.forms.MainForm</mainClass>
+                            <mainClass>com.mares.utils.wordc.forms.MainWindow</mainClass>
                         </manifest>
                     </archive>
                     <descriptorRefs>
